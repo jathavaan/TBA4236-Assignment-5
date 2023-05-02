@@ -13,6 +13,8 @@ class RANSAC:
     __points: list[Node]
     __inliers: list[Node]
     __outliers: list[Node]
+    __radius: float
+    __center: tuple[float, float]
 
     def __init__(self, filename: str) -> None:
         filepath = os.path.join(Config.DATASET_DIR.value, filename)
@@ -21,6 +23,8 @@ class RANSAC:
         self.points = []
         self.inliers = []
         self.outliers = []
+        self.radius = 0
+        self.center = 0, 0
 
         with open(filepath, "r") as file:
             lines = file.readlines()
@@ -61,7 +65,7 @@ class RANSAC:
                 outliers = []
 
                 p1, p2, p3 = self.__select_random_points()
-                R, dist_from_center = RANSAC.dist_from_center(p1=p1, p2=p2, p3=p3)
+                R, center, dist_from_center = RANSAC.dist_from_center(p1=p1, p2=p2, p3=p3)
                 for point in self.points:
                     d = dist_from_center(point.x, point.y)
                     if R - Config.R_THRESHOLD.value <= d <= R + Config.R_THRESHOLD.value:
@@ -72,6 +76,8 @@ class RANSAC:
                 if len(inliers) > len(self.inliers):
                     self.inliers = inliers
                     self.outliers = outliers
+                    self.radius = R
+                    self.center = center
 
             print(f"Found {len(self.inliers)} inliers and {len(self.outliers)} outliers.")
             x_inliers = np.array([point.x for point in self.inliers])
@@ -84,7 +90,12 @@ class RANSAC:
 
             plt.plot(x_inliers, y_inliers, "o", color="blue", label=f"Inliers: {len(self.inliers)}")
             plt.plot(x_outliers, y_outliers, "o", color="red", label=f"Outliers: {len(self.outliers)}")
-            plt.title(f"RANSAC - Iteration {i}")
+            plt.plot(
+                self.center[0], self.center[1],
+                "o", color="black",
+                label=f"Center ({round(self.center[0])}, {round(self.center[1])})"
+            )
+            plt.title(f"RANSAC - Iteration {i} - Radius: {self.radius:.4f}")
             plt.legend()
             plt.savefig(title, dpi=400)
 
@@ -97,7 +108,11 @@ class RANSAC:
         return tuple(np.random.choice(self.points, 3, replace=False))
 
     @staticmethod
-    def dist_from_center(p1: Node, p2: Node, p3: Node) -> tuple[float, Callable[[float, float], float]]:
+    def dist_from_center(p1: Node, p2: Node, p3: Node) -> tuple[
+        float,
+        tuple[float, float],
+        Callable[[float, float], float]
+    ]:
         a = np.array(
             [
                 [p1.x - p2.x, p1.y - p2.y],
@@ -115,4 +130,4 @@ class RANSAC:
         center = np.linalg.solve(a, b)
         radius = np.sqrt((p1.x - center[0]) ** 2 + (p1.y - center[1]) ** 2)
 
-        return radius, lambda x, y: (x - center[0]) ** 2 + (y - center[1]) ** 2 - radius ** 2
+        return radius, center, lambda x, y: (x - center[0]) ** 2 + (y - center[1]) ** 2 - radius ** 2
